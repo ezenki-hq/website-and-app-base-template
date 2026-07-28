@@ -1,1 +1,43 @@
 .worktrees/
+
+# Local configuration and generated credentials
+.env
+.env.local
+.env.*
+!.env.example
+*.creds
+*.jwt
+*.nkey
+infra/nats/generated/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.venv/
+
+# Node and web builds
+node_modules/
+coverage/
+dist/
+build/
+
+# Flutter and Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+app/.metadata
+
+# Local databases
+*.sqlite
+*.sqlite3
+
+# Editor files
+.vscode/
+.idea/
