@@ -1,0 +1,8 @@
+# Generated dependencies and build output are created in the container.
+node_modules
+dist
+coverage
+
+# Runtime configuration must be supplied to the container, not copied from the host.
+.env
+.env.*
