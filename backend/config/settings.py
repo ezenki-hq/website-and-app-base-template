@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "wagtail",
     "modelcluster",
     "taggit",
+    "health",
     "home",
 ]
 
