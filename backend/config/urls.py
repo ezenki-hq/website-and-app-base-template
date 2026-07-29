@@ -10,5 +10,6 @@ urlpatterns = [
     path("admin/", include(wagtailadmin_urls)),
     path("documents/", include(wagtaildocs_urls)),
     path("health/", include("health.urls")),
+    path("api/nats/", include("nats_auth.urls")),
     path("", include(wagtail_urls)),
 ]

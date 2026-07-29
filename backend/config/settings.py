@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "taggit",
     "health",
     "home",
+    "nats_auth",
 ]
 
 MIDDLEWARE = [
@@ -106,3 +107,21 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 WAGTAIL_SITE_NAME = os.environ.get("WAGTAIL_SITE_NAME", "Billboard website")
 WAGTAILADMIN_BASE_URL = os.environ.get("WAGTAILADMIN_BASE_URL", "http://localhost:8000")
+
+NATS_JWT_SIGNING_SECRET = os.environ.get("NATS_JWT_SIGNING_SECRET")
+if not NATS_JWT_SIGNING_SECRET:
+    if MANAGEMENT_COMMAND in {"test", "check", "makemigrations"}:
+        NATS_JWT_SIGNING_SECRET = "test-only-nats-jwt-signing-secret"
+    else:
+        raise RuntimeError(
+            "NATS_JWT_SIGNING_SECRET must be set for runtime commands"
+        )
+NATS_JWT_ISSUER = os.environ.get("NATS_JWT_ISSUER", "website-app-template")
+NATS_JWT_AUDIENCE = os.environ.get("NATS_JWT_AUDIENCE", "nats")
+NATS_JWT_TTL_SECONDS = int(os.environ.get("NATS_JWT_TTL_SECONDS", "86400"))
+NATS_JWT_SUBJECT = os.environ.get("NATS_JWT_SUBJECT", "development-user")
+NATS_ACCOUNT = os.environ.get("NATS_ACCOUNT", "APP")
+NATS_PUBLISH_ALLOW = os.environ.get("NATS_PUBLISH_ALLOW", '["app.>"]')
+NATS_PUBLISH_DENY = os.environ.get("NATS_PUBLISH_DENY", "[]")
+NATS_SUBSCRIBE_ALLOW = os.environ.get("NATS_SUBSCRIBE_ALLOW", '["app.>"]')
+NATS_SUBSCRIBE_DENY = os.environ.get("NATS_SUBSCRIBE_DENY", "[]")
