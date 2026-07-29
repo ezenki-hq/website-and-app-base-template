@@ -1,0 +1,17 @@
+services:
+  web:
+    image: "${COMPOSE_PROJECT_NAME:-infra}-flutter-web:local"
+    pull_policy: build
+    build:
+      context: ../app
+      dockerfile: Dockerfile.web
+    environment: {}
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/ >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  nginx:
+    volumes:
+      - ./nginx/conf.d/flutter-web.conf:/etc/nginx/app.conf:ro

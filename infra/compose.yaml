@@ -1,0 +1,125 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres-data:/var/lib/postgresql
+
+  backend:
+    build:
+      context: ../backend
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen("http://localhost:8000/health/", timeout=2)
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: ../web
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+      VITE_NATS_WEBSOCKET_URL: ${VITE_NATS_WEBSOCKET_URL}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch("http://127.0.0.1:5173/")
+            .then((response) => {
+              if (!response.ok) process.exit(1);
+            })
+            .catch(() => process.exit(1))
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  nats:
+    image: nats:2.14-alpine
+    command: ["-c", "/etc/nats/nats.conf"]
+    environment:
+      NATS_ACCOUNT_SIGNER_PUBLIC_KEY: ${NATS_ACCOUNT_SIGNER_PUBLIC_KEY}
+      NATS_AUTH_USER: ${NATS_AUTH_USER}
+      NATS_AUTH_PASSWORD: ${NATS_AUTH_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - ./nats/nats.conf:/etc/nats/nats.conf:ro
+
+  nats-auth-redirect:
+    image: ezenki/nats-auth-redirector:1.0.0
+    environment:
+      AUTH_SERVER: http://backend:8000/api/nats/authorize/
+      NATS_URL: nats://${NATS_AUTH_USER}:${NATS_AUTH_PASSWORD}@nats:4222
+      ACCOUNT_SIGNER_SEED: ${NATS_ACCOUNT_SIGNER_SEED}
+    depends_on:
+      backend:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.30-alpine
+    depends_on:
+      backend:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget --quiet --output-document=/dev/null
+          --header='Host: localhost' http://127.0.0.1/health/
+          && wget --quiet --output-document=/dev/null
+          --header='Host: app.localhost' http://127.0.0.1/
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "8081:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d/default.conf:/etc/nginx/app.conf:ro
+
+  nats-smoke:
+    image: natsio/nats-box:0.19.2
+    profiles:
+      - smoke
+    depends_on:
+      nats:
+        condition: service_healthy
+      nginx:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
