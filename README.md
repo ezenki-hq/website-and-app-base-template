@@ -260,12 +260,10 @@ every optional setting implemented by Django.
 | React runtime | `VITE_API_BASE_URL`, `VITE_NATS_WEBSOCKET_URL` | Default same-origin paths are `/api/` and `/nats/` |
 | Optional Wagtail | `WAGTAIL_SITE_NAME`, `WAGTAILADMIN_BASE_URL` | Defaults to `Billboard website` and `http://localhost:8000`; these optional keys are implemented but are not written by the generator or listed in `.env.example` |
 
-Compose gives the backend container the entire generated `.env` through
-`env_file`. Consequently, redirect auth credentials and account signer
-material are present in the backend process environment even though the
-current Django settings and application code do not read or use them. The
-consumer descriptions above are not claims of environment-level secret
-isolation.
+Compose interpolates the generated `.env` on the host and explicitly injects
+only each service's required keys. The backend receives its Django/Wagtail,
+PostgreSQL, client-JWT, and NATS policy settings; it does not receive the
+redirect auth credentials, account signer material, or React runtime values.
 
 Malformed permission JSON fails Django configuration. An empty allow list
 allows no subjects; it does not mean unrestricted access. Keep `.env` ignored,
@@ -284,7 +282,7 @@ production.
 | Flutter UI and integration | `app/lib/`, especially `app/lib/integrations/` |
 | Local routes | `infra/nginx/conf.d/default.conf` and the Flutter example |
 | Local orchestration | `infra/compose.yaml` and narrowly scoped Compose overrides |
-| Credential exposure | Narrow per-service environment/secret injection when adapting the local Compose topology for least privilege |
+| Credential injection | Preserve explicit per-service environment/secret injection when adapting the local Compose topology |
 
 Keep the redirector image unchanged unless the project deliberately adopts and
 documents a different redirect service contract.

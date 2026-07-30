@@ -33,9 +33,8 @@ For routes, ports, and network boundaries, see the
 
 The client JWT signing secret and NATS account signer seed are different
 credentials with different consumers: Django uses the former and the
-redirector uses the latter. In the checked-in Compose stack, this use boundary
-is not an environment-exposure boundary because the backend receives the
-entire generated `.env`.
+redirector uses the latter. The checked-in Compose stack preserves that
+environment-exposure boundary through explicit per-service key injection.
 
 ## Development token endpoint
 
@@ -177,13 +176,10 @@ redirect auth username/password must also match the user configured in NATS.
 Changing only one side causes authorization startup or response verification
 to fail.
 
-Separately, `backend.env_file` loads the complete generated `.env` into the
-backend process. The backend therefore also receives
-`NATS_ACCOUNT_SIGNER_SEED`, `NATS_ACCOUNT_SIGNER_PUBLIC_KEY`,
-`NATS_AUTH_USER`, and `NATS_AUTH_PASSWORD`, although current Django settings
-and application code do not read or use them. The local topology documents
-credential consumers; it does not provide least-privilege environment
-isolation.
+The backend receives only its Django/Wagtail, PostgreSQL, client-JWT, and NATS
+policy settings. Compose does not inject `NATS_ACCOUNT_SIGNER_SEED`,
+`NATS_ACCOUNT_SIGNER_PUBLIC_KEY`, `NATS_AUTH_USER`, or `NATS_AUTH_PASSWORD`
+into that process.
 
 ## Native and WebSocket use
 
@@ -241,16 +237,15 @@ authorization policy, least-privilege per-service secret injection, protected
 secret storage, credential rotation, TLS for HTTP/NATS/WebSocket traffic,
 deliberate port exposure, and independent deployment/readiness configuration.
 It must use separate Nginx and deployment files rather than promoting the local
-server blocks. Derived local configurations should also audit and narrow the
-backend's broad `env_file` when credential isolation matters.
+server blocks. Derived local configurations should preserve explicit
+per-service injection when adding or changing environment keys.
 
 When changing the integration, keep these trust properties:
 
 - clients never receive `NATS_JWT_SIGNING_SECRET`, the signer seed, or redirect
   auth credentials;
-- Django uses only the client JWT secret in the current implementation, while
-  its local Compose process environment also contains the signer and redirect
-  credentials;
+- Django receives its client-JWT and policy settings, not the signer seed or
+  redirect credentials;
 - NATS receives only the signer public key, not the seed;
 - the redirector's exempt credentials are not application-client credentials;
 - account and permissions come from validated server policy; and

@@ -127,19 +127,19 @@ production exposure guidance.
 
 Django owns the HS256 client-JWT secret and is the only component that issues
 or validates that JWT. The JWT contains a server-constructed NATS scope.
-The current Compose file supplies the backend with the entire generated `.env`,
-so its process environment also contains the NATS account signer material and
-redirect auth credentials. Django settings and application code do not
-currently read or use those redirector credentials. This is environment
-exposure without application use, not a secret-isolation boundary.
+The Compose file explicitly supplies the backend only with its Django/Wagtail,
+PostgreSQL, client-JWT, and NATS policy settings. Account signer material,
+redirect auth credentials, and React runtime values are not present in the
+backend process environment. Optional Wagtail values use the same defaults as
+Django settings and remain overridable through Compose interpolation.
 
 ### NATS and redirector boundary
 
 NATS trusts the account signer public key. The redirector is the component
 configured to use the matching private seed and sign authorization-response
-JWTs; the backend also receives that seed through its broad `env_file` but does
-not use it. The redirector connects as an exempt user in the `AUTH` account;
-application clients are authorized into the `APP` account. NATS uses the `SYS`
+JWTs; the backend does not receive that seed. The redirector connects as an
+exempt user in the `AUTH` account; application clients are authorized into the
+`APP` account. NATS uses the `SYS`
 system account for the auth-callout request path.
 
 The redirector forwards the opaque client token to Django and turns Django's
@@ -153,17 +153,17 @@ the [authoritative redirect contract](../integrations/nats-auth-redirect.md).
 | --- | --- | --- | --- | --- |
 | `DJANGO_SECRET_KEY` | owns/uses | no access | no access | no access |
 | `NATS_JWT_SIGNING_SECRET` | owns/uses | no access | no access | no access |
-| Account signer seed | present in environment; unused | no access | uses | no access |
-| Account signer public key | present in environment; unused | trusts/uses | derives from seed | no access |
-| Redirect auth password | present in environment; unused | validates | uses | no access |
+| Account signer seed | no access | no access | uses | no access |
+| Account signer public key | no access | trusts/uses | derives from seed | no access |
+| Redirect auth password | no access | validates | uses | no access |
 | Issued client JWT | issues/validates | carries in auth callout | forwards | owns/uses |
 | Server-built NATS permissions | constructs/signs in JWT | enforces | copies/signs response | cannot select |
 
 Generated credentials live in ignored `.env`, which should remain local and
-must not be printed, committed, or reused in production. The local backend's
-whole-file `env_file` is convenient, not least-privilege injection. Derived
-deployments should audit and narrow each service's environment or secret
-mounts while preserving the credential consumers shown above.
+must not be printed, committed, or reused in production. Compose interpolates
+that file and explicitly injects only the keys each service consumes. Derived
+deployments should preserve that separation while replacing local environment
+injection with appropriate secret storage and mounts.
 
 ## Configuration ownership
 
