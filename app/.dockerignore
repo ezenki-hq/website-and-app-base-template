@@ -1,0 +1,30 @@
+# Flutter and Dart dependency/build state
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+
+# Platform dependency caches and build artifacts
+android/.gradle/
+android/**/build/
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/ephemeral/
+ios/Flutter/.last_build_id
+
+# Runtime configuration
+.env
+.env*
+
+# Editor and operating-system metadata
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+*.swp
+.DS_Store

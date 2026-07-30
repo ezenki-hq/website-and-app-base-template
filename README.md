@@ -59,7 +59,10 @@ bash infra/scripts/generate-local-env.sh
 ```
 
 The generator is idempotent: a valid existing `.env` is checked and left
-unchanged. It does not print generated values.
+unchanged. Existing files must be regular, not symbolic links, and have exact
+mode `0600`; the generator also derives the account public key from the seed
+with the pinned NATS tooling and rejects a mismatch. It does not print
+generated values.
 
 Build and start the default React stack:
 
@@ -83,8 +86,9 @@ Stop the default stack:
 docker compose --env-file .env -f infra/compose.yaml down
 ```
 
-The named `postgres-data` volume remains. Removing that volume is a separate,
-destructive operation and is not part of normal shutdown.
+The named `postgres-data` and generated `static-assets` volumes remain.
+Removing the database volume is a separate, destructive operation and is not
+part of normal shutdown.
 
 To inspect service state in another shell:
 
@@ -95,9 +99,11 @@ docker compose --env-file .env -f infra/compose.yaml logs --tail=100
 
 ## Django and Wagtail
 
-The backend container waits for PostgreSQL, runs migrations, then serves
-Django with Gunicorn on its internal port. The migration creates a minimal
-Wagtail home page and default site.
+The backend container waits for PostgreSQL, runs migrations, collects Django
+and Wagtail static assets into the shared `static-assets` volume, then serves
+Django with Gunicorn on its internal port. Nginx mounts that volume read-only
+and serves `/static/`; Gunicorn does not serve static files. The migration
+creates a minimal Wagtail home page and default site.
 
 Routes behind `localhost:8081` include:
 
@@ -230,6 +236,7 @@ Nginx is the only browser-facing HTTP entry point in the default stack.
 
 | Host | Route | Destination |
 | --- | --- | --- |
+| `localhost` | `/static/*` | Nginx read-only static asset volume |
 | `localhost` | `/nats/` | NATS WebSocket listener |
 | `localhost` | every other path | Django and Wagtail |
 | `app.localhost` | `/health/` | Django |

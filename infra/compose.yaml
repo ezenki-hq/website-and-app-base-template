@@ -40,6 +40,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - static-assets:/app/staticfiles
     healthcheck:
       test:
         - CMD
@@ -129,6 +131,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d/default.conf:/etc/nginx/app.conf:ro
+      - static-assets:/var/www/static:ro
 
   nats-smoke:
     image: natsio/nats-box:0.19.2
@@ -142,3 +145,4 @@ services:
 
 volumes:
   postgres-data:
+  static-assets:

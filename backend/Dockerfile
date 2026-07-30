@@ -8,7 +8,9 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 
 COPY . ./
-RUN useradd --create-home --uid 10001 app && chown -R app:app /app
+RUN useradd --create-home --uid 10001 app \
+    && mkdir -p /app/staticfiles \
+    && chown -R app:app /app
 
 USER app
 ENV PATH="/app/.venv/bin:$PATH"

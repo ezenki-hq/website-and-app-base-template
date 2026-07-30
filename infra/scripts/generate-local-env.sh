@@ -21,7 +21,7 @@ fail() {
 }
 
 validate_existing_environment() {
-  local key count
+  local key count signer_seed signer_public_key derived_public_key
 
   for key in "${required_keys[@]}"; do
     count="$(grep -c "^${key}=" "${local_env_file}" || true)"
@@ -34,10 +34,32 @@ validate_existing_environment() {
   grep -Eq '^NATS_AUTH_PASSWORD=.{32,}$' "${local_env_file}" || fail 'invalid NATS_AUTH_PASSWORD'
   grep -Eq '^NATS_ACCOUNT_SIGNER_SEED=SA[A-Z0-9]+$' "${local_env_file}" || fail 'invalid NATS_ACCOUNT_SIGNER_SEED'
   grep -Eq '^NATS_ACCOUNT_SIGNER_PUBLIC_KEY=A[A-Z0-9]+$' "${local_env_file}" || fail 'invalid NATS_ACCOUNT_SIGNER_PUBLIC_KEY'
+
+  signer_seed="$(
+    sed -n 's/^NATS_ACCOUNT_SIGNER_SEED=//p' "${local_env_file}"
+  )"
+  signer_public_key="$(
+    sed -n 's/^NATS_ACCOUNT_SIGNER_PUBLIC_KEY=//p' "${local_env_file}"
+  )"
+  if ! derived_public_key="$(
+    printf '%s\n' "${signer_seed}" |
+      docker run --rm -i natsio/nats-box:0.19.2 \
+        nk -inkey /dev/stdin -pubout 2>/dev/null
+  )"; then
+    fail 'NATS account signer seed could not be validated'
+  fi
+  [[ "${derived_public_key}" == "${signer_public_key}" ]] ||
+    fail 'NATS account signer public key does not match its seed'
 }
 
-if [[ -e "${local_env_file}" ]]; then
+if [[ -L "${local_env_file}" || -e "${local_env_file}" ]]; then
+  [[ ! -L "${local_env_file}" ]] ||
+    fail "${local_env_file} must not be a symbolic link"
   [[ -f "${local_env_file}" ]] || fail "${local_env_file} is not a regular file"
+  file_mode="$(stat -c '%a' "${local_env_file}")" ||
+    fail "could not inspect ${local_env_file} permissions"
+  [[ "${file_mode}" == "600" ]] ||
+    fail "${local_env_file} must have mode 0600"
   validate_existing_environment
   exit 0
 fi

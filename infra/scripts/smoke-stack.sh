@@ -402,27 +402,60 @@ temporary_directory="$(mktemp -d)"
 printf '%s\n' 'PASS Compose services are healthy'
 "${compose[@]}" ps
 
+website_page="$(
+  curl --fail --silent --show-error \
+    --header 'Host: localhost' \
+    http://127.0.0.1:8081/
+)"
+grep -Fq '<h1>Billboard website</h1>' <<<"${website_page}" ||
+  fail 'localhost did not return the Wagtail website'
+
+application_page="$(
+  curl --fail --silent --show-error \
+    --header 'Host: app.localhost' \
+    http://127.0.0.1:8081/
+)"
+
+health_response="$(
+  curl --fail --silent --show-error \
+    --header 'Host: app.localhost' \
+    http://127.0.0.1:8081/health/
+)"
+[[ "$(jq --compact-output --sort-keys . <<<"${health_response}")" == \
+  '{"status":"ok"}' ]] ||
+  fail 'application health route did not return exactly {"status":"ok"}'
+
+admin_page="$(
+  curl --fail --location --silent --show-error \
+    --header 'Host: localhost' \
+    http://127.0.0.1:8081/admin/
+)"
+grep -Fqi 'Wagtail' <<<"${admin_page}" ||
+  fail 'Wagtail admin login did not render'
+grep -Fqi 'sign in' <<<"${admin_page}" ||
+  fail 'Wagtail admin login did not offer sign in'
+
+wagtail_admin_asset="${temporary_directory}/wagtail-admin-core.css"
 curl --fail --silent --show-error \
   --header 'Host: localhost' \
-  http://127.0.0.1:8081/ >/dev/null
-curl --fail --silent --show-error \
-  --header 'Host: app.localhost' \
-  http://127.0.0.1:8081/ >/dev/null
-curl --fail --silent --show-error \
-  --header 'Host: app.localhost' \
-  http://127.0.0.1:8081/health/ >/dev/null
-printf '%s\n' 'PASS localhost, app.localhost, and application health routes'
+  --output "${wagtail_admin_asset}" \
+  http://127.0.0.1:8081/static/wagtailadmin/css/core.css
+[[ -s "${wagtail_admin_asset}" ]] ||
+  fail 'Wagtail admin static asset was empty'
+
+printf '%s\n' \
+  'PASS Wagtail website, admin, static asset, and exact backend health'
 
 if [[ "${SMOKE_FLUTTER_WEB:-0}" == "1" ]]; then
-  flutter_page="$(
-    curl --fail --silent --show-error \
-      --header 'Host: app.localhost' \
-      http://127.0.0.1:8081/
-  )"
   grep -Fq '<script src="flutter_bootstrap.js" async></script>' \
-    <<<"${flutter_page}" ||
+    <<<"${application_page}" ||
     fail 'Flutter Web proof-of-life marker was not found'
   printf '%s\n' 'PASS Flutter Web proof-of-life marker'
+else
+  grep -Fq '<script type="module" src="/src/main.tsx"></script>' \
+    <<<"${application_page}" ||
+    fail 'React proof-of-life marker was not found'
+  printf '%s\n' 'PASS React proof-of-life marker'
 fi
 
 token_response="$(

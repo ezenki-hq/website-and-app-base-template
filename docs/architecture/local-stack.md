@@ -13,6 +13,7 @@ Browser
   | http://localhost:8081 or http://app.localhost:8081
   v
 Nginx :80
+  |---------------- static-assets volume (read only)
   |---------------- Django/Gunicorn :8000 -------- PostgreSQL :5432
   |                         ^
   |                         | GET /api/nats/authorize/
@@ -41,6 +42,7 @@ header.
 
 | Host | Request path | Internal destination |
 | --- | --- | --- |
+| `localhost` | `/static/*` | Nginx `static-assets` volume |
 | `localhost` | `/nats/` | `http://nats:8080` with WebSocket upgrade |
 | `localhost` | every other path | `http://backend:8000` |
 | `app.localhost` | exactly `/health/` | `http://backend:8000` |
@@ -99,11 +101,14 @@ deployment must provide TLS and separate network exposure rules.
 | Nginx | both a website health route and application frontend response |
 | Redirector | none; no health endpoint exists |
 
-The backend entrypoint applies migrations before starting Gunicorn. PostgreSQL
-data lives in the named `postgres-data` volume and survives normal Compose
-shutdown. The redirector starts only after Django and NATS report healthy and
-uses `restart: unless-stopped` because an initial NATS connection failure exits
-the process.
+The backend entrypoint applies migrations and collects Django/Wagtail static
+assets before starting Gunicorn. The backend writes the named `static-assets`
+volume as its non-root runtime user; Nginx mounts it read-only and serves
+`/static/` in both frontend modes. Backend health therefore cannot pass before
+collection finishes. PostgreSQL data lives in the named `postgres-data` volume
+and survives normal Compose shutdown. The redirector starts only after Django
+and NATS report healthy and uses `restart: unless-stopped` because an initial
+NATS connection failure exits the process.
 
 ## Trust boundaries
 
