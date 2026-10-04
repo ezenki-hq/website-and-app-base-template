@@ -151,6 +151,7 @@ import websockets
 from django.conf import settings
 
 from events.tokens import issue_event_token
+from events.broker import NatsEventBridge
 
 async def main():
     origin = "http://app.localhost:8081"
@@ -189,6 +190,33 @@ async def main():
         if error.response.status_code != 403:
             raise AssertionError("malformed token did not receive HTTP 403") from error
 
+    try:
+        async with websockets.connect(f"{uri}/", origin=origin):
+            raise AssertionError("malformed event path was accepted")
+    except websockets.exceptions.InvalidStatus as error:
+        if error.response.status_code != 403:
+            raise AssertionError("malformed event path did not receive HTTP 403") from error
+
+    denied_bridge = NatsEventBridge()
+    try:
+        await asyncio.wait_for(
+            denied_bridge.start(
+                ("outside.scope",),
+                lambda message: asyncio.sleep(0),
+                lambda: asyncio.sleep(0),
+            ),
+            timeout=5,
+        )
+    except nats.errors.Error as error:
+        if "permissions violation" not in str(error).lower():
+            raise AssertionError(
+                "NATS setup failed for a reason other than permissions"
+            ) from error
+    else:
+        raise AssertionError("NATS permission denial did not fail subscription setup")
+    finally:
+        await denied_bridge.close()
+
     print("event websocket smoke: PASS")
 
 
@@ -209,5 +237,10 @@ then
 fi
 grep -Fq 'event websocket smoke: PASS' "${smoke_output}" ||
   fail 'event WebSocket probe did not report success'
+backend_logs="$("${compose[@]}" logs --no-color backend 2>&1)"
+if grep -Fq '/ws/events/' <<<"${backend_logs}"; then
+  fail 'backend logs exposed a WebSocket event token path'
+fi
+printf '%s\n' 'PASS backend logs do not expose event WebSocket tokens'
 printf '%s\n' 'PASS private NATS event through Django WebSocket and Nginx'
 printf '%s\n' 'smoke-stack: PASS'

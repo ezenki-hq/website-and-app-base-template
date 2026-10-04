@@ -1,4 +1,6 @@
 import asyncio
+import logging
+from contextlib import suppress
 from datetime import datetime, timezone
 
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -9,10 +11,17 @@ from events.frames import pack_event
 from events.tokens import decode_event_token
 
 
+logger = logging.getLogger(__name__)
+EVENTS_MESSAGE_QUEUE_LIMIT = 100
+
+
 class EventsConsumer(AsyncWebsocketConsumer):
     async def connect(self) -> None:
         self.bridge = None
         self.expiry_task = None
+        self.message_task = None
+        self.message_queue = asyncio.Queue(maxsize=EVENTS_MESSAGE_QUEUE_LIMIT)
+        self.delivery_overflow = False
         self.accepted = False
 
         if not self._origin_is_allowed():
@@ -35,6 +44,10 @@ class EventsConsumer(AsyncWebsocketConsumer):
 
         await self.accept()
         self.accepted = True
+        if self.delivery_overflow:
+            await self.close(code=1013)
+            return
+        self.message_task = asyncio.create_task(self._deliver_messages())
         delay = max(
             0.0,
             (claims.expires_at - datetime.now(timezone.utc)).total_seconds(),
@@ -48,13 +61,30 @@ class EventsConsumer(AsyncWebsocketConsumer):
         await self._cleanup()
 
     async def _forward_message(self, message) -> None:
-        await self.send(
-            bytes_data=pack_event(
-                message.subject,
-                message.headers,
-                message.data,
-            )
-        )
+        if self.message_queue.full():
+            if not self.delivery_overflow:
+                self.delivery_overflow = True
+                if self.accepted:
+                    await self.close(code=1013)
+            return
+        self.message_queue.put_nowait(message)
+
+    async def _deliver_messages(self) -> None:
+        try:
+            while True:
+                message = await self.message_queue.get()
+                await self.send(
+                    bytes_data=pack_event(
+                        message.subject,
+                        message.headers,
+                        message.data,
+                    )
+                )
+        except Exception:
+            logger.exception("Event WebSocket delivery failed")
+            if self.accepted:
+                with suppress(Exception):
+                    await self.close(code=1011)
 
     async def _broker_closed(self) -> None:
         if self.accepted:
@@ -69,6 +99,12 @@ class EventsConsumer(AsyncWebsocketConsumer):
         task = getattr(self, "expiry_task", None)
         if task is not None and task is not asyncio.current_task():
             task.cancel()
+        message_task = getattr(self, "message_task", None)
+        if message_task is not None and message_task is not asyncio.current_task():
+            message_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await message_task
+        self.message_task = None
         bridge = getattr(self, "bridge", None)
         self.bridge = None
         if bridge is not None:

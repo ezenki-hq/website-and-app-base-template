@@ -27,35 +27,28 @@ for config in "${repo_root}/infra/nginx/conf.d/default.conf" \
     exit 1
   fi
 
-  ws_location="$(awk '
-    /location \/ws\/events\// { in_location = 1 }
-    in_location { print }
-    in_location && /}/ { exit }
-  ' "${config}")"
-  [[ -n "${ws_location}" ]] || {
-    printf 'missing /ws/events/ location in %s\n' "${config}" >&2
-    exit 1
-  }
-  grep -Fq 'proxy_pass http://backend:8000;' <<<"${ws_location}" || {
-    printf 'WebSocket route does not target Django in %s\n' "${config}" >&2
-    exit 1
-  }
-  grep -Fq 'proxy_set_header Upgrade $http_upgrade;' <<<"${ws_location}" || {
-    printf 'WebSocket upgrade header missing in %s\n' "${config}" >&2
-    exit 1
-  }
-  grep -Fq 'proxy_set_header Connection "upgrade";' <<<"${ws_location}" || {
-    printf 'WebSocket connection header missing in %s\n' "${config}" >&2
-    exit 1
-  }
-  grep -Fq 'proxy_read_timeout 86400s;' <<<"${ws_location}" || {
-    printf 'long WebSocket read timeout missing in %s\n' "${config}" >&2
-    exit 1
-  }
-  grep -Fq 'access_log off;' <<<"${ws_location}" || {
-    printf 'test_ws_route_has_no_access_log failed for %s\n' "${config}" >&2
-    exit 1
-  }
+  awk -v config="${config}" '
+    /location \/ws\/events\/[[:space:]]*\{/ {
+      locations++
+      in_location = 1
+      next
+    }
+    in_location && /}/ { in_location = 0; next }
+    in_location {
+      if ($0 ~ /proxy_pass http:\/\/backend:8000;/) proxy++
+      if ($0 ~ /proxy_set_header Upgrade \$http_upgrade;/) upgrade++
+      if ($0 ~ /proxy_set_header Connection "upgrade";/) connection++
+      if ($0 ~ /proxy_read_timeout 86400s;/) timeout++
+      if ($0 ~ /access_log off;/) access_log++
+    }
+    END {
+      if (locations == 0 || proxy != locations || upgrade != locations ||
+          connection != locations || timeout != locations || access_log != locations) {
+        printf "incomplete /ws/events/ directives in %s (%d locations)\n", config, locations > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "${config}"
 done
 
 printf '%s\n' 'private NATS and WebSocket routing: PASS'

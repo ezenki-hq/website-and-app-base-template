@@ -44,7 +44,6 @@ INSTALLED_APPS = [
     "home",
     "channels",
     "events",
-    "nats_auth",
 ]
 
 MIDDLEWARE = [
