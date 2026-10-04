@@ -112,15 +112,6 @@ services:
       - ./nginx/conf.d/default.conf:/etc/nginx/app.conf:ro
       - static-assets:/var/www/static:ro
 
-  nats-smoke:
-    image: natsio/nats-box:0.19.2
-    profiles:
-      - smoke
-    depends_on:
-      nats:
-        condition: service_healthy
-      nginx:
-        condition: service_healthy
 
 volumes:
   postgres-data:
