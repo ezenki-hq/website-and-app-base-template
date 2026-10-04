@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     "taggit",
     "health",
     "home",
+    "channels",
+    "events",
     "nats_auth",
 ]
 
@@ -74,6 +76,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
 
 DATABASES = {
     "default": {
@@ -135,3 +138,9 @@ if not EVENTS_JWT_SIGNING_SECRET:
             "EVENTS_JWT_SIGNING_SECRET must be set for runtime commands"
         )
 EVENTS_JWT_TTL_SECONDS = int(os.environ.get("EVENTS_JWT_TTL_SECONDS", "3600"))
+
+EVENTS_ALLOWED_ORIGINS = tuple(
+    origin.strip()
+    for origin in os.environ.get("EVENTS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+)
