@@ -27,16 +27,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_HOST: ${POSTGRES_HOST}
       POSTGRES_PORT: ${POSTGRES_PORT}
-      NATS_JWT_SIGNING_SECRET: ${NATS_JWT_SIGNING_SECRET}
-      NATS_JWT_ISSUER: ${NATS_JWT_ISSUER}
-      NATS_JWT_AUDIENCE: ${NATS_JWT_AUDIENCE}
-      NATS_JWT_TTL_SECONDS: ${NATS_JWT_TTL_SECONDS}
-      NATS_JWT_SUBJECT: ${NATS_JWT_SUBJECT}
-      NATS_ACCOUNT: ${NATS_ACCOUNT}
-      NATS_PUBLISH_ALLOW: ${NATS_PUBLISH_ALLOW}
-      NATS_PUBLISH_DENY: ${NATS_PUBLISH_DENY}
-      NATS_SUBSCRIBE_ALLOW: ${NATS_SUBSCRIBE_ALLOW}
-      NATS_SUBSCRIBE_DENY: ${NATS_SUBSCRIBE_DENY}
+      NATS_URL: nats://nats:4222
+      NATS_BACKEND_USER: ${NATS_BACKEND_USER}
+      NATS_BACKEND_PASSWORD: ${NATS_BACKEND_PASSWORD}
+      EVENTS_JWT_SIGNING_SECRET: ${EVENTS_JWT_SIGNING_SECRET}
+      EVENTS_JWT_TTL_SECONDS: ${EVENTS_JWT_TTL_SECONDS}
+      EVENTS_ALLOWED_ORIGINS: ${EVENTS_ALLOWED_ORIGINS}
     depends_on:
       postgres:
         condition: service_healthy
@@ -59,7 +55,7 @@ services:
       context: ../web
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL}
-      VITE_NATS_WEBSOCKET_URL: ${VITE_NATS_WEBSOCKET_URL}
+      VITE_EVENTS_WEBSOCKET_URL: ${VITE_EVENTS_WEBSOCKET_URL}
     healthcheck:
       test:
         - CMD
@@ -79,32 +75,15 @@ services:
     image: nats:2.14-alpine
     command: ["-c", "/etc/nats/nats.conf"]
     environment:
-      NATS_ACCOUNT_SIGNER_PUBLIC_KEY: ${NATS_ACCOUNT_SIGNER_PUBLIC_KEY}
-      NATS_AUTH_USER: ${NATS_AUTH_USER}
-      NATS_AUTH_PASSWORD: ${NATS_AUTH_PASSWORD}
+      NATS_BACKEND_USER: ${NATS_BACKEND_USER}
+      NATS_BACKEND_PASSWORD: ${NATS_BACKEND_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:8222/healthz"]
       interval: 5s
       timeout: 5s
       retries: 10
-    ports:
-      - "4222:4222"
-      - "8222:8222"
     volumes:
       - ./nats/nats.conf:/etc/nats/nats.conf:ro
-
-  nats-auth-redirect:
-    image: ezenki/nats-auth-redirector:1.0.0
-    environment:
-      AUTH_SERVER: http://backend:8000/api/nats/authorize/
-      NATS_URL: nats://${NATS_AUTH_USER}:${NATS_AUTH_PASSWORD}@nats:4222
-      ACCOUNT_SIGNER_SEED: ${NATS_ACCOUNT_SIGNER_SEED}
-    depends_on:
-      backend:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-    restart: unless-stopped
 
   nginx:
     image: nginx:1.30-alpine
