@@ -1,9 +1,9 @@
 export interface RuntimeConfig {
   apiBaseUrl: string;
-  natsWebsocketUrl: string;
+  eventsWebsocketUrl: string;
 }
 
 export const runtimeConfig: RuntimeConfig = {
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "/api/",
-  natsWebsocketUrl: import.meta.env.VITE_NATS_WEBSOCKET_URL || "/nats/",
+  eventsWebsocketUrl: import.meta.env.VITE_EVENTS_WEBSOCKET_URL || "/ws/events/",
 };

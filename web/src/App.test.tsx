@@ -12,10 +12,11 @@ describe("App", () => {
 });
 
 describe("runtimeConfig", () => {
-  it("uses relative API and NATS defaults", () => {
+  it("uses relative API and Django events WebSocket defaults", () => {
     expect(runtimeConfig).toMatchObject({
       apiBaseUrl: "/api/",
-      natsWebsocketUrl: "/nats/",
+      eventsWebsocketUrl: "/ws/events/",
     });
+    expect(runtimeConfig).not.toHaveProperty("natsWebsocketUrl");
   });
 });

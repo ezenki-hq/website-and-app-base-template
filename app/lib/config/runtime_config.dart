@@ -4,8 +4,8 @@ abstract final class RuntimeConfig {
     defaultValue: '/api/',
   );
 
-  static const String natsWebSocketUrl = String.fromEnvironment(
-    'NATS_WEBSOCKET_URL',
-    defaultValue: '/nats/',
+  static const String eventsWebSocketUrl = String.fromEnvironment(
+    'EVENTS_WEBSOCKET_URL',
+    defaultValue: '/ws/events/',
   );
 }

@@ -1,188 +1,94 @@
 # Local stack architecture
 
 This document describes the checked-in development topology. It is not a
-production deployment design. Start with the root [operator guide](../../README.md)
-and use [NATS authentication](../integrations/nats-authentication.md) for the
-credential flow.
+production deployment design. See the [event WebSocket guide](../integrations/events-websocket.md)
+for the token, origin, and MessagePack contracts.
 
 ## Topology
 
 ```text
-Browser
-  |
-  | http://localhost:8081 or http://app.localhost:8081
-  v
-Nginx :80
-  |---------------- static-assets volume (read only)
-  |---------------- Django/Gunicorn :8000 -------- PostgreSQL :5432
-  |                         ^
-  |                         | GET /api/nats/authorize/
-  |                         |
-  |---------------- React/Vite :5173
-  |                 or Flutter Web :8080
-  |
-  `---------------- NATS WebSocket :8080
-
-Native or diagnostic client ---------------------- NATS :4222
-                                                       |
-                                                       | auth callout
-                                                       v
-                                              Redirector (no listener)
-                                                       |
-                                                       `---- Django :8000
+Browser or native app
+        |
+        | HTTP and WebSocket through port 8081
+        v
+      Nginx
+        |---------------- Wagtail static asset volume (read-only)
+        |---------------- Django ASGI :8000 -------- PostgreSQL :5432
+        |                           |
+        |                           `---- NATS :4222 (internal only)
+        |                                      ^
+        |                                      |
+        |---------------- React :5173          |
+        |          or Flutter Web :8080        |
+                                               |
+                                      NATS event publisher
+                                      (internal Compose network)
 ```
 
-All service names and internal ports are addresses on the Compose network.
-Only explicit `ports` mappings are reachable from the development host.
+Compose service names and internal ports are reachable only on the Compose
+network. Only Nginx publishes a host port.
 
 ## Two-host routing
 
-Nginx listens once and selects a fixed local server block from the HTTP `Host`
-header.
-
 | Host | Request path | Internal destination |
 | --- | --- | --- |
-| `localhost` | `/static/*` | Nginx `static-assets` volume |
-| `localhost` | `/nats/` | `http://nats:8080` with WebSocket upgrade |
-| `localhost` | every other path | `http://backend:8000` |
-| `app.localhost` | exactly `/health/` | `http://backend:8000` |
-| `app.localhost` | `/api/*` | `http://backend:8000` |
-| `app.localhost` | `/nats/` | `http://nats:8080` with WebSocket upgrade |
-| `app.localhost` | every other path, default | `http://web:5173` for React |
-| `app.localhost` | every other path, Flutter override | `http://web:8080` for Flutter Web |
+| `localhost` | `/static/*` | Nginx static asset volume |
+| `localhost` | `/ws/events/*` | Django ASGI, with access logging disabled |
+| `localhost` | every other path | Django ASGI HTTP |
+| `app.localhost` | `/health/` and `/api/*` | Django ASGI HTTP |
+| `app.localhost` | `/ws/events/*` | Django ASGI WebSocket, with access logging disabled |
+| `app.localhost` | every other path | React by default; Flutter Web with its Compose override |
 
-The public URLs include the host-mapped port:
-`http://localhost:8081` and `http://app.localhost:8081`. Nginx forwards the
-original host and standard client/protocol headers to HTTP upstreams. The NATS
-locations use HTTP/1.1 upgrade headers, disable proxy buffering, and set
-24-hour read and send timeouts for long-lived connections.
+The host URLs use port `8081`. Nginx forwards WebSocket upgrade headers and
+uses a long read timeout. Nginx access logs are disabled on the JWT-bearing
+event route. Configure any other proxy, CDN, tracing, or error logging layer
+to redact that path too.
 
-## Ports
+## Ports and trust boundaries
 
-| Component | Container port | Published host port | Purpose |
+| Component | Container port | Published host port | Use |
 | --- | ---: | ---: | --- |
 | PostgreSQL | `5432` | none | Django database |
-| Django/Gunicorn | `8000` | none | Website, health, admin, and API |
-| React/Vite | `5173` | none | Default application frontend |
+| Django ASGI | `8000` | none | Website, health, admin, and event WebSocket |
+| React | `5173` | none | Default application frontend |
 | Flutter Web override | `8080` | none | Replacement application frontend |
-| NATS native listener | `4222` | `4222` | Native/backend/diagnostic NATS clients |
-| NATS WebSocket listener | `8080` | none | Browser NATS, reached through Nginx |
-| NATS monitoring | `8222` | `8222` | Development monitoring and health |
-| Nginx | `80` | `8081` | Public development HTTP and WebSocket entry |
-| NATS auth redirector | none | none | Outbound NATS and HTTP client only |
+| NATS native listener | `4222` | none | Django and other internal publishers |
+| NATS monitoring | `8222` | none | Internal health check |
+| Nginx | `80` | `8081` | Browser-facing development entry point |
 
-The Compose-only frontend ports both use service name `web`; the Flutter
-override replaces the React image, health check, and upstream selection.
+Django uses one authenticated NATS connection per accepted WebSocket and
+subscribes only to the subjects in its validated event token. Compose gives
+the broker and backend the same NATS username/password. The NATS user is
+limited to publish and subscribe subjects under `app.>` by default. NATS has
+no WebSocket listener in this stack.
 
-## Native and WebSocket NATS clients
+Only Django receives `EVENTS_JWT_SIGNING_SECRET`. React and Flutter receive an
+event WebSocket URL but no NATS address or credential. The token issuer is a
+Python helper for derived server code; this template does not add a public
+issuer API or application login flow.
 
-Native NATS clients connect to `nats://localhost:4222` from the development
-host or `nats://nats:4222` from another Compose service. This path is suitable
-for backend code, native Flutter code when the device can reach the published
-host, and diagnostic clients.
+## Lifecycle and persistence
 
-Browser clients cannot use the native NATS protocol. They connect through the
-Nginx route, normally `ws://app.localhost:8081/nats/`. Nginx upgrades the
-connection and proxies it to `nats:8080`. Both listeners use the same NATS
-auth-callout policy and require the client token.
+Django's ASGI application routes HTTP requests through the existing Django
+application and WebSockets through Channels. The WebSocket consumer validates
+the token before opening NATS, accepts only after all subscriptions are
+established, closes at token expiry, and releases subscriptions and its NATS
+connection on disconnect or failure.
 
-All checked-in NATS transport is unencrypted development traffic. A production
-deployment must provide TLS and separate network exposure rules.
-
-## Service readiness and persistence
-
-| Service | Readiness signal |
-| --- | --- |
-| PostgreSQL | `pg_isready` |
-| Django | database-backed `GET /health/` |
-| React/Vite | successful local HTTP response |
-| Flutter Web | successful local HTTP response |
-| NATS | monitoring `GET /healthz` |
-| Nginx | both a website health route and application frontend response |
-| Redirector | none; no health endpoint exists |
-
-The backend entrypoint applies migrations and collects Django/Wagtail static
-assets before starting Gunicorn. The backend writes the named `static-assets`
-volume as its non-root runtime user; Nginx mounts it read-only and serves
-`/static/` in both frontend modes. Backend health therefore cannot pass before
-collection finishes. PostgreSQL data lives in the named `postgres-data` volume
-and survives normal Compose shutdown. The redirector starts only after Django
-and NATS report healthy and uses `restart: unless-stopped` because an initial
-NATS connection failure exits the process.
-
-## Trust boundaries
-
-### Browser and native client boundary
-
-Clients are untrusted. The local anonymous issuer returns a development token,
-but it does not accept an account, publish subjects, or subscribe subjects from
-the request. The signed JWT is the client's only NATS credential. A derived
-project must authenticate identity before issuance and construct permissions
-on the server.
-
-### Public HTTP boundary
-
-Only Nginx's port `8081`, NATS native port `4222`, and NATS monitoring port
-`8222` are published. Django, PostgreSQL, both frontend development servers,
-NATS WebSocket port `8080`, and the redirector stay on the Compose network.
-Published monitoring and native NATS access are local-development choices, not
-production exposure guidance.
-
-### Django policy boundary
-
-Django owns the HS256 client-JWT secret and is the only component that issues
-or validates that JWT. The JWT contains a server-constructed NATS scope.
-The Compose file explicitly supplies the backend only with its Django/Wagtail,
-PostgreSQL, client-JWT, and NATS policy settings. Account signer material,
-redirect auth credentials, and React runtime values are not present in the
-backend process environment. Optional Wagtail values use the same defaults as
-Django settings and remain overridable through Compose interpolation.
-
-### NATS and redirector boundary
-
-NATS trusts the account signer public key. The redirector is the component
-configured to use the matching private seed and sign authorization-response
-JWTs; the backend does not receive that seed. The redirector connects as an
-exempt user in the `AUTH` account; application clients are authorized into the
-`APP` account. NATS uses the `SYS`
-system account for the auth-callout request path.
-
-The redirector forwards the opaque client token to Django and turns Django's
-response into the signed NATS authorization response. It does not make local
-authorization policy decisions. Its exact observed behavior is maintained in
-the [authoritative redirect contract](../integrations/nats-auth-redirect.md).
-
-## Credential exposure and use
-
-| Credential or value | Django | NATS | Redirector | Client |
-| --- | --- | --- | --- | --- |
-| `DJANGO_SECRET_KEY` | owns/uses | no access | no access | no access |
-| `NATS_JWT_SIGNING_SECRET` | owns/uses | no access | no access | no access |
-| Account signer seed | no access | no access | uses | no access |
-| Account signer public key | no access | trusts/uses | derives from seed | no access |
-| Redirect auth password | no access | validates | uses | no access |
-| Issued client JWT | issues/validates | carries in auth callout | forwards | owns/uses |
-| Server-built NATS permissions | constructs/signs in JWT | enforces | copies/signs response | cannot select |
-
-Generated credentials live in ignored `.env`, which should remain local and
-must not be printed, committed, or reused in production. Compose interpolates
-that file and explicitly injects only the keys each service consumes. Derived
-deployments should preserve that separation while replacing local environment
-injection with appropriate secret storage and mounts.
+PostgreSQL data lives in the named `postgres-data` volume. Django applies
+migrations and collects static assets before serving. Nginx mounts static
+assets read-only. The NATS service exposes internal health on port `8222` and
+has no host port mapping.
 
 ## Configuration ownership
 
-- `infra/compose.yaml` defines the default React topology.
-- `infra/compose.flutter-web.yaml` narrowly replaces the application frontend.
-- `infra/nginx/conf.d/default.conf` defines default two-host routing.
-- `infra/nginx/conf.d/flutter-web.conf` preserves routes while changing the
-  application upstream.
-- `infra/nats/nats.conf` defines listeners, accounts, the exempt auth user, and
-  auth callout.
-- `.env.example` inventories the keys written by the local generator; the
-  generator creates `.env`. Optional application settings may exist outside
-  that generated-key inventory.
+- `infra/compose.yaml` defines the default React topology and private NATS.
+- `infra/compose.flutter-web.yaml` replaces the application frontend.
+- `infra/nginx/conf.d/default.conf` defines the React two-host routes.
+- `infra/nginx/conf.d/flutter-web.conf` keeps the same routes for Flutter Web.
+- `infra/nats/nats.conf` defines internal NATS authentication and permissions.
+- `.env.example` documents the local values; the generator creates a private `.env`.
 
-Production hostnames, TLS, deployment orchestration, credentials, network
-policy, and observability belong in separate configuration. Do not reuse the
-development Nginx files as a parameterized production configuration.
+Production hostnames, TLS, credential storage, network policy, observability,
+and scaling belong in deployment-specific configuration. Do not expose the
+local NATS listeners or use local Nginx files as production configuration.

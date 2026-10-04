@@ -11,6 +11,6 @@ void main() {
 
   test('uses same-origin defaults', () {
     expect(RuntimeConfig.apiBaseUrl, '/api/');
-    expect(RuntimeConfig.natsWebSocketUrl, '/nats/');
+    expect(RuntimeConfig.eventsWebSocketUrl, '/ws/events/');
   });
 }
