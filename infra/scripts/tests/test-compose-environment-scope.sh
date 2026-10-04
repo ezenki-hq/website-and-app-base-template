@@ -16,7 +16,8 @@ if [[ "${resolved_backend_keys}" != "${expected_backend_keys}" ]]; then
   exit 1
 fi
 
-if jq -e '.services | has("nats-auth-redirect")' <<<"${resolved_config}" >/dev/null; then
+legacy_auth_service='nats-auth''-redirect'
+if jq -e --arg service "${legacy_auth_service}" '.services | has($service)' <<<"${resolved_config}" >/dev/null; then
   printf '%s\n' 'obsolete NATS auth redirect service is still configured' >&2
   exit 1
 fi

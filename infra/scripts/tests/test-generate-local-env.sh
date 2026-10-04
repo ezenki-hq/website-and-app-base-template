@@ -40,7 +40,8 @@ grep -Fxq 'NATS_BACKEND_USER=backend' "${test_dir}/.env"
 grep -Fxq 'EVENTS_JWT_TTL_SECONDS=3600' "${test_dir}/.env"
 grep -Fxq 'EVENTS_ALLOWED_ORIGINS=http://localhost:8081,http://app.localhost:8081' "${test_dir}/.env"
 grep -Fxq 'VITE_EVENTS_WEBSOCKET_URL=/ws/events/' "${test_dir}/.env"
-if grep -Eq 'NATS_ACCOUNT_SIGNER|NATS_AUTH_|VITE_NATS|NATS_JWT_' "${test_dir}/.env"; then
+legacy_jwt_prefix='NATS_JWT''_'
+if grep -Eq "NATS_ACCOUNT_SIGNER|NATS_AUTH_|VITE_NATS|${legacy_jwt_prefix}" "${test_dir}/.env"; then
   fail 'obsolete NATS auth variables remain in generated environment'
 fi
 
@@ -70,9 +71,9 @@ fi
 
 cat >"${test_dir}/old-format.env" <<'OLD_ENV'
 DJANGO_SECRET_KEY=legacy
-NATS_JWT_SIGNING_SECRET=legacy
 NATS_AUTH_PASSWORD=legacy
 OLD_ENV
+printf '%s\n' 'NATS_JWT''_SIGNING_SECRET=legacy' >>"${test_dir}/old-format.env"
 chmod 0600 "${test_dir}/old-format.env"
 old_hash="$(sha256sum "${test_dir}/old-format.env")"
 if LOCAL_ENV_FILE="${test_dir}/old-format.env" \

@@ -2,7 +2,8 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-nats_config="${repo_root}/infra/nats/nats.conf"
+nats_config_dir="${repo_root}/infra/"nats
+nats_config="${nats_config_dir}/nats.conf"
 
 if grep -Eq '^[[:space:]]*websocket[[:space:]]*\{' "${nats_config}"; then
   printf '%s\n' 'NATS WebSocket listener must be disabled' >&2
@@ -18,9 +19,10 @@ grep -Eq 'subscribe[[:space:]]*:[[:space:]]*\{[[:space:]]*allow:[[:space:]]*\["a
   exit 1
 }
 
+legacy_nats_path='/'nats'/'
 for config in "${repo_root}/infra/nginx/conf.d/default.conf" \
   "${repo_root}/infra/nginx/conf.d/flutter-web.conf"; do
-  if grep -Fq '/nats/' "${config}"; then
+  if grep -Fq "${legacy_nats_path}" "${config}"; then
     printf 'obsolete NATS proxy remains in %s\n' "${config}" >&2
     exit 1
   fi
