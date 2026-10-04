@@ -125,3 +125,13 @@ NATS_PUBLISH_ALLOW = os.environ.get("NATS_PUBLISH_ALLOW", '["app.>"]')
 NATS_PUBLISH_DENY = os.environ.get("NATS_PUBLISH_DENY", "[]")
 NATS_SUBSCRIBE_ALLOW = os.environ.get("NATS_SUBSCRIBE_ALLOW", '["app.>"]')
 NATS_SUBSCRIBE_DENY = os.environ.get("NATS_SUBSCRIBE_DENY", "[]")
+
+EVENTS_JWT_SIGNING_SECRET = os.environ.get("EVENTS_JWT_SIGNING_SECRET")
+if not EVENTS_JWT_SIGNING_SECRET:
+    if MANAGEMENT_COMMAND in {"test", "check", "makemigrations"}:
+        EVENTS_JWT_SIGNING_SECRET = "test-only-events-jwt-signing-secret"
+    else:
+        raise RuntimeError(
+            "EVENTS_JWT_SIGNING_SECRET must be set for runtime commands"
+        )
+EVENTS_JWT_TTL_SECONDS = int(os.environ.get("EVENTS_JWT_TTL_SECONDS", "3600"))
