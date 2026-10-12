@@ -40,6 +40,10 @@ grep -Fxq 'NATS_BACKEND_USER=backend' "${test_dir}/.env"
 grep -Fxq 'EVENTS_JWT_TTL_SECONDS=3600' "${test_dir}/.env"
 grep -Fxq 'EVENTS_ALLOWED_ORIGINS=http://localhost:8081,http://app.localhost:8081' "${test_dir}/.env"
 grep -Fxq 'VITE_EVENTS_WEBSOCKET_URL=/ws/events/' "${test_dir}/.env"
+for key in S3_STORAGE_BUCKET_NAME S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY \
+  S3_ENDPOINT_URL S3_REGION_NAME S3_CUSTOM_DOMAIN; do
+  grep -Fxq "${key}=" "${test_dir}/.env" || fail "${key} is missing or not blank"
+done
 legacy_jwt_prefix='NATS_JWT''_'
 if grep -Eq "NATS_ACCOUNT_SIGNER|NATS_AUTH_|VITE_NATS|${legacy_jwt_prefix}" "${test_dir}/.env"; then
   fail 'obsolete NATS auth variables remain in generated environment'

@@ -22,6 +22,13 @@ client connection lifecycle.
 Generate a local `.env` with separate Django, event-token, database, and NATS
 secrets. The file is created with mode `0600` and is ignored by Git.
 
+Media files use local filesystem storage by default. To enable S3 media storage,
+set `S3_STORAGE_BUCKET_NAME`, `S3_ACCESS_KEY_ID`, and `S3_SECRET_ACCESS_KEY`.
+S3 is enabled only when all three values are present. Optionally set
+`S3_ENDPOINT_URL` for an S3-compatible service, `S3_REGION_NAME`, and
+`S3_CUSTOM_DOMAIN` for CDN URLs. Static files continue to use Django's local
+static file storage.
+
 ```bash
 bash infra/scripts/generate-local-env.sh
 docker compose --env-file .env -f infra/compose.yaml up --build

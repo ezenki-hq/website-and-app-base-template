@@ -106,6 +106,39 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+S3_REQUIRED_ENVIRONMENT = (
+    "S3_STORAGE_BUCKET_NAME",
+    "S3_ACCESS_KEY_ID",
+    "S3_SECRET_ACCESS_KEY",
+)
+s3_credentials = {
+    name: os.environ.get(name, "").strip() for name in S3_REQUIRED_ENVIRONMENT
+}
+if all(s3_credentials.values()):
+    s3_options = {
+        "bucket_name": s3_credentials["S3_STORAGE_BUCKET_NAME"],
+        "access_key": s3_credentials["S3_ACCESS_KEY_ID"],
+        "secret_key": s3_credentials["S3_SECRET_ACCESS_KEY"],
+    }
+    for environment_name, option_name in (
+        ("S3_ENDPOINT_URL", "endpoint_url"),
+        ("S3_REGION_NAME", "region_name"),
+        ("S3_CUSTOM_DOMAIN", "custom_domain"),
+    ):
+        value = os.environ.get(environment_name, "").strip()
+        if value:
+            s3_options[option_name] = value
+
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3.S3Storage",
+            "OPTIONS": s3_options,
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 WAGTAIL_SITE_NAME = os.environ.get("WAGTAIL_SITE_NAME", "Billboard website")
 WAGTAILADMIN_BASE_URL = os.environ.get("WAGTAILADMIN_BASE_URL", "http://localhost:8000")
