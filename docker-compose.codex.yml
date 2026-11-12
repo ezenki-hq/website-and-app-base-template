@@ -1,0 +1,55 @@
+
+services:
+  codex:
+    image: ezenki/codex-container:latest
+    init: true
+    working_dir: /workspace
+
+    environment:
+      HOME: /home/codex
+      CODEX_HOME: /home/codex/.codex
+      DOCKER_HOST: tcp://dind:2375
+
+    volumes:
+      # Current project
+      - ./:/workspace
+
+      # Shared Codex configuration, auth, MCP
+      - ${HOME}/.codex:/home/codex/.codex
+
+      # Shared global skills
+      - ${HOME}/.agents/skills:/home/codex/.agents/skills
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+    command: sleep infinity
+
+  # Optional Docker daemon for integration tests
+  dind:
+    image: docker:28-dind
+
+    privileged: true
+
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+
+    command: ["--tls=false"]
+
+    volumes:
+      - dind-data:/var/lib/docker
+
+      # Needed for nested bind mounts
+      - ./:/workspace
+
+    restart: unless-stopped
+
+volumes:
+  dind-data:
